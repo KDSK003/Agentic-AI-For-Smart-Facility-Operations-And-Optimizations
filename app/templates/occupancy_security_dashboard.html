@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Occupancy &amp; Security Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/vendor/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <h1>🛡️ Weeks 5-6: Occupancy &amp; Security Intelligence</h1>
+      <p class="subtitle">Milestone 3 — Occupancy Agent + Security Agent</p>
+    </div>
+    <div class="live-badge"><span class="live-dot"></span> Live Monitoring</div>
+  </div>
+  <nav class="tabs">
+    <a href="/">Home</a>
+    <a href="/dashboard/energy">Energy</a>
+    <a href="/dashboard/maintenance">Maintenance</a>
+    <a href="/dashboard/occupancy-security" class="active">Occupancy &amp; Security</a>
+  </nav>
+
+  <div class="container">
+    <div class="grid-2">
+      <div class="card">
+        <h3>🧩 Security &amp; Occupancy Features</h3>
+        <ul class="feature-list">
+          <li>Occupancy Heatmaps</li>
+          <li>Room Utilization Analytics</li>
+          <li>Visitor Tracking</li>
+          <li>Access Control Monitoring</li>
+          <li>CCTV Event Monitoring</li>
+          <li>Security Incident Detection</li>
+          <li>Building Zone Analytics</li>
+          <li>Overcrowding Alerts</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>📊 Key Performance Indicators</h3>
+        <div class="grid-2-equal" style="margin-bottom:0;">
+          <div class="kpi"><div class="label">Occupancy Rate</div><div class="value" id="kpi-occ">–</div></div>
+          <div class="kpi"><div class="label">Active Visitors</div><div class="value" id="kpi-vis">–</div></div>
+          <div class="kpi"><div class="label">Security Events (24h)</div><div class="value" id="kpi-sec">–</div></div>
+          <div class="kpi"><div class="label">Unauthorized Access</div><div class="value" id="kpi-unauth">–</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2-equal">
+      <div class="card">
+        <h3>🏢 Zone Occupancy Distribution</h3>
+        <div id="zone-bars"></div>
+      </div>
+      <div class="card">
+        <h3>🔔 Security Event Types (7 days)</h3>
+        <canvas id="eventChart"></canvas>
+      </div>
+    </div>
+
+    <div class="grid-2-equal">
+      <div class="card">
+        <h3>🚧 Overcrowding Alerts</h3>
+        <table id="crowd-table"><thead><tr><th>Zone</th><th>Occupancy</th><th>Utilization</th></tr></thead><tbody></tbody></table>
+      </div>
+      <div class="card">
+        <h3>🕵️ Recent Security Incidents</h3>
+        <table id="incident-table"><thead><tr><th>Type</th><th>Zone</th><th>Severity</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </div>
+
+<script>
+async function j(url) { const r = await fetch(url); return r.json(); }
+
+(async () => {
+  const occKpis = await j('/api/occupancy/kpis');
+  document.getElementById('kpi-occ').innerText = occKpis.occupancy_rate_pct + '%';
+  document.getElementById('kpi-vis').innerText = occKpis.active_visitors;
+
+  const secKpis = await j('/api/security/kpis');
+  document.getElementById('kpi-sec').innerText = secKpis.security_events;
+  document.getElementById('kpi-unauth').innerText = secKpis.unauthorized_access;
+
+  const zones = await j('/api/occupancy/zones');
+  const zDiv = document.getElementById('zone-bars');
+  Object.entries(zones).forEach(([k,v]) => {
+    zDiv.innerHTML += `<div class="bar-row"><div class="bar-label"><span>${k}</span><span>${v}%</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${v}%;background:#3b7dd8"></div></div></div>`;
+  });
+
+  const evTypes = await j('/api/security/event-types');
+  new Chart(document.getElementById('eventChart'), {
+    type: 'bar',
+    data: {
+      labels: Object.keys(evTypes),
+      datasets: [{ label: 'Events', data: Object.values(evTypes),
+        backgroundColor: ['#ef4444','#f59e0b','#3b7dd8','#14b8a6','#94a3b8'] }]
+    },
+    options: { plugins: { legend: { display: false } }, indexAxis: 'y' }
+  });
+
+  const crowd = await j('/api/occupancy/overcrowding');
+  const cTbody = document.querySelector('#crowd-table tbody');
+  crowd.slice(0, 8).forEach(c => {
+    cTbody.innerHTML += `<tr><td>${c.zone}</td><td>${c.occupancy_count}/${c.capacity}</td><td><span class="badge high">${c.utilization_pct}%</span></td></tr>`;
+  });
+  if (crowd.length === 0) cTbody.innerHTML = '<tr><td colspan="3" style="color:var(--muted)">No overcrowding detected recently.</td></tr>';
+
+  const incidents = await j('/api/security/incidents');
+  const iTbody = document.querySelector('#incident-table tbody');
+  incidents.slice(0, 8).forEach(i => {
+    iTbody.innerHTML += `<tr><td>${i.event_type}</td><td>${i.zone}</td><td><span class="badge ${i.severity.toLowerCase()}">${i.severity}</span></td></tr>`;
+  });
+})();
+</script>
+</body>
+</html>
