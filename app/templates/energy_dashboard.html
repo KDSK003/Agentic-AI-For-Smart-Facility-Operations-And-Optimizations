@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Energy Intelligence Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/vendor/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <h1>⚡ Weeks 1-2: Energy Intelligence Dashboard</h1>
+      <p class="subtitle">Milestone 1 — Energy Agent</p>
+    </div>
+    <div class="live-badge"><span class="live-dot"></span> Live Monitoring</div>
+  </div>
+  <nav class="tabs">
+    <a href="/">Home</a>
+    <a href="/dashboard/energy" class="active">Energy</a>
+    <a href="/dashboard/maintenance">Maintenance</a>
+    <a href="/dashboard/occupancy-security">Occupancy &amp; Security</a>
+  </nav>
+
+  <div class="container">
+    <div class="grid-2">
+      <div class="card">
+        <h3>🧩 Energy Intelligence Features</h3>
+        <ul class="feature-list">
+          <li>Real-Time Energy Monitoring</li>
+          <li>Electricity Usage Analytics</li>
+          <li>Water Consumption Analytics</li>
+          <li>HVAC Performance Monitoring</li>
+          <li>Energy Heatmaps</li>
+          <li>Carbon Emission Tracking</li>
+          <li>AI Energy Optimization</li>
+          <li>Demand Forecasting</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>📊 Key Performance Indicators</h3>
+        <div class="grid-2-equal" style="margin-bottom:0;">
+          <div class="kpi"><div class="label">Total Energy (24h)</div><div class="value" id="kpi-total">–</div></div>
+          <div class="kpi"><div class="label">Est. Cost</div><div class="value" id="kpi-cost">–</div></div>
+          <div class="kpi"><div class="label">Efficiency Score</div><div class="value" id="kpi-eff">–</div></div>
+          <div class="kpi"><div class="label">Carbon Emissions</div><div class="value" id="kpi-carbon">–</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2-equal">
+      <div class="card">
+        <h3>⚡ Energy Distribution by System</h3>
+        <div id="dist-bars"></div>
+      </div>
+      <div class="card">
+        <h3>📈 3-Day Demand Forecast</h3>
+        <canvas id="forecastChart"></canvas>
+      </div>
+    </div>
+
+    <div class="grid-2-equal">
+      <div class="card">
+        <h3>🚨 Detected Anomalies (7 days) &nbsp; <span id="acc-badge" class="badge good"></span></h3>
+        <table id="anomaly-table"><thead><tr><th>Timestamp</th><th>Usage (kWh)</th><th>Z-score</th></tr></thead><tbody></tbody></table>
+      </div>
+      <div class="card">
+        <h3>💡 AI Recommendations</h3>
+        <div id="recs"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+async function j(url) { const r = await fetch(url); return r.json(); }
+
+(async () => {
+  const summary = await j('/api/energy/summary');
+  document.getElementById('kpi-total').innerText = summary.total_kwh + ' kWh';
+  document.getElementById('kpi-cost').innerText = '₹' + summary.estimated_cost_inr.toLocaleString();
+  document.getElementById('kpi-eff').innerText = summary.efficiency_score + '%';
+  document.getElementById('kpi-carbon').innerText = summary.carbon_kg + ' kg';
+
+  const dist = await j('/api/energy/distribution');
+  const distDiv = document.getElementById('dist-bars');
+  const colors = {HVAC:'#3b7dd8', Lighting:'#14b8a6', Equipment:'#f59e0b', Other:'#94a3b8'};
+  Object.entries(dist).forEach(([k,v]) => {
+    distDiv.innerHTML += `<div class="bar-row"><div class="bar-label"><span>${k}</span><span>${v}%</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${v}%;background:${colors[k]||'#3b7dd8'}"></div></div></div>`;
+  });
+
+  const forecast = await j('/api/energy/forecast');
+  new Chart(document.getElementById('forecastChart'), {
+    type: 'line',
+    data: {
+      labels: forecast.map(f => f.date.slice(5)),
+      datasets: [{ label: 'Predicted kWh', data: forecast.map(f => f.predicted_kwh),
+        borderColor: '#1c4b8c', backgroundColor: 'rgba(28,75,140,0.1)', fill: true, tension: 0.35 }]
+    },
+    options: { plugins: { legend: { display: false } } }
+  });
+
+  const anom = await j('/api/energy/anomalies');
+  document.getElementById('acc-badge').innerText = 'Detection accuracy: ' + anom.accuracy_pct + '%';
+  const tbody = document.querySelector('#anomaly-table tbody');
+  anom.anomalies.slice(0, 8).forEach(a => {
+    tbody.innerHTML += `<tr><td>${a.timestamp.replace('T',' ').slice(0,16)}</td><td>${a.electricity_usage_kwh}</td><td>${a.z_score}</td></tr>`;
+  });
+  if (anom.anomalies.length === 0) tbody.innerHTML = '<tr><td colspan="3" style="color:var(--muted)">No anomalies in this window.</td></tr>';
+
+  const recs = await j('/api/energy/recommendations');
+  const recsDiv = document.getElementById('recs');
+  recs.forEach(r => {
+    recsDiv.innerHTML += `<div class="rec-card ${r.priority==='High'?'high':''}"><span class="priority">${r.priority}</span>${r.recommendation}</div>`;
+  });
+})();
+</script>
+</body>
+</html>
